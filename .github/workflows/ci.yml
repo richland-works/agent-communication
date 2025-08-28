@@ -13,57 +13,57 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Setup authentication for private repos
       run: |
         echo "machine github.com" >> ~/.netrc
-        echo "login ${{ github.actor }}" >> ~/.netrc  
+        echo "login ${{ github.actor }}" >> ~/.netrc
         echo "password ${{ secrets.GITHUB_TOKEN }}" >> ~/.netrc
         chmod 600 ~/.netrc
-    
+
     - name: Install Poetry
       uses: snok/install-poetry@v1
       with:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
-    
+
     - name: Load cached venv
       id: cached-poetry-dependencies
       uses: actions/cache@v3
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
-    
+
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-root
-    
+
     - name: Install project
       run: poetry install --no-interaction
-    
+
     - name: Run linting
       run: |
         poetry run ruff check .
         poetry run ruff format --check .
-    
+
     - name: Run type checking
       run: poetry run mypy .
       continue-on-error: true  # Don't fail build on mypy issues
-    
+
     - name: Run tests
       run: |
         poetry run pytest --cov=. --cov-report=xml --cov-report=term-missing
-    
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       if: matrix.python-version == '3.11'  # Only upload once
@@ -75,29 +75,29 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'  # Only build on main branch
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: "3.11"
-    
+
     - name: Setup authentication for private repos
       run: |
         echo "machine github.com" >> ~/.netrc
-        echo "login ${{ github.actor }}" >> ~/.netrc  
+        echo "login ${{ github.actor }}" >> ~/.netrc
         echo "password ${{ secrets.GITHUB_TOKEN }}" >> ~/.netrc
         chmod 600 ~/.netrc
-    
+
     - name: Install Poetry
       uses: snok/install-poetry@v1
-    
+
     - name: Build package
       run: poetry build
-    
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
@@ -110,7 +110,7 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
@@ -118,7 +118,7 @@ jobs:
         scan-ref: '.'
         format: 'sarif'
         output: 'trivy-results.sarif'
-    
+
     - name: Upload Trivy scan results
       uses: github/codeql-action/upload-sarif@v2
       if: always()

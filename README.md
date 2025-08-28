@@ -52,11 +52,11 @@ from agent_communication.base import BaseMessage
 
 class PaymentRequestMessage(BaseMessage):
     """Message for payment processing requests."""
-    
+
     amount: float
     user_id: str
     payment_method: str
-    
+
     @classmethod
     def get_channel_pattern(cls) -> Callable[[str, str], str]:
         def pattern_func(direction: str, session_id: str) -> str:
@@ -65,11 +65,11 @@ class PaymentRequestMessage(BaseMessage):
 
 class PaymentResponseMessage(BaseMessage):
     """Message for payment processing responses."""
-    
+
     success: bool
     transaction_id: str
     message: str
-    
+
     @classmethod
     def get_channel_pattern(cls) -> Callable[[str, str], str]:
         def pattern_func(direction: str, session_id: str) -> str:
@@ -86,16 +86,16 @@ from agent_communication.logger import get_logger
 
 class PaymentAgent(BaseAgent):
     """Agent that handles payment processing."""
-    
+
     # Declare message types this agent can receive
     messages = [PaymentRequestMessage]
-    
+
     # Declare message types this agent can send
     sending_messages = [PaymentResponseMessage]
-    
+
     def __init__(self):
         self.logger = get_logger("PaymentAgent")
-    
+
     def handle_message(self, message: BaseMessage, context: Dict[str, str]) -> None:
         """Process incoming payment requests."""
         if isinstance(message, PaymentRequestMessage):
@@ -107,16 +107,16 @@ class PaymentAgent(BaseAgent):
                     "session_id": context.get("session_id")
                 }
             )
-            
+
             # Process the payment...
-            
+
             # Create response
             response = PaymentResponseMessage(
                 success=True,
                 transaction_id="TXN123456",
                 message=f"Payment of ${message.amount} processed successfully"
             )
-            
+
             # Validate we can send this message type
             assert self.validate_outgoing_message(response)
 ```
@@ -182,7 +182,7 @@ try:
     parse_channel("invalid_format")
 except InvalidChannelFormat as e:
     print(e)
-    # Channel 'invalid_format' has invalid format. 
+    # Channel 'invalid_format' has invalid format.
     # Expected: 'MessageClass:direction:session_id', got: 'invalid_format'
 ```
 
