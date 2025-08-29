@@ -27,11 +27,17 @@ async def test_rabbitmq_connection(rabbitmq_url: str) -> None:
         print("✓ RabbitMQ connection successful")
 
         # Get some server properties (if available)
+        # Note: We use getattr() instead of direct attribute access because:
+        # - AbstractRobustConnection doesn't expose 'connection' in its type definition
+        # - The actual runtime implementation may have this attribute
+        # - Using getattr() satisfies both Pylance and mypy without type: ignore comments
         if hasattr(connection, "connection"):
-            props = connection.connection.server_properties
-            if props:
-                version = props.get("version", "unknown")
-                print(f"✓ RabbitMQ version: {version}")
+            inner_conn = getattr(connection, "connection", None)
+            if inner_conn:
+                props = inner_conn.server_properties
+                if props:
+                    version = props.get("version", "unknown")
+                    print(f"✓ RabbitMQ version: {version}")
 
     except Exception as e:
         pytest.fail(f"Failed to connect to RabbitMQ: {e}")
