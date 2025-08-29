@@ -233,6 +233,7 @@ class TestBaseAgent:
 
         agent.handle_message(message, context)
 
+        assert received_context is not None
         assert received_message == message
         assert received_context == context
         assert received_message.data == "test_data"  # type: ignore[attr-defined]

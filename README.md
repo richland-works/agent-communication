@@ -145,6 +145,264 @@ print(parsed)
 # {'message_class': 'PaymentRequestMessage', 'direction': 'request', 'session_id': 'session456'}
 ```
 
+## Production Architecture
+
+### Understanding the Stack
+
+The `agent-communication` package is designed as a **foundational messaging library** - think of it like Flask for web applications or SQLAlchemy for databases. It provides the core primitives for reliable agent-based messaging, but production systems require additional layers for resilience, performance, and game-specific logic.
+
+### Architectural Layers
+
+```
+┌─────────────────────────────────────┐
+│     Game-Specific Layer            │ ← Your game logic
+│  (game rules, state, mechanics)     │
+├─────────────────────────────────────┤
+│    Performance Layer (Optional)     │ ← Caching, batching
+│  (optimization, compression)        │
+├─────────────────────────────────────┤
+│     Resilience Layer (Optional)     │ ← Persistence, replay
+│  (journaling, transactions)         │
+├─────────────────────────────────────┤
+│    agent-communication (Core)       │ ← This package
+│  (routing, pub/sub, patterns)       │
+├─────────────────────────────────────┤
+│     Infrastructure (Redis/RMQ)      │ ← Message brokers
+└─────────────────────────────────────┘
+```
+
+### What This Package Provides
+
+**Core Messaging Features** ✅
+- Type-safe message definitions with Pydantic
+- Agent abstraction with subscription management
+- Redis and RabbitMQ router implementations
+- Pattern-based message routing
+- Automatic reconnection and basic resilience
+- Message serialization/deserialization
+- Comprehensive logging
+
+**Basic Production Features** ✅
+- Durable queues (RabbitMQ)
+- Message persistence
+- Connection pooling
+- Health checks
+- Graceful shutdown
+
+### What You Need to Add for Production
+
+#### 1. Resilience Layer (Preventing Data Loss)
+
+For production games where losing player progress is unacceptable, add a resilience layer:
+
+```python
+# Example: Message journaling wrapper
+from agent_communication import RedisRouter
+from your_resilience_package import MessageJournal, CircuitBreaker
+
+# Base router from this package
+base_router = RedisRouter(url="redis://localhost")
+
+# Add journaling for persistence
+journaled_router = MessageJournal(
+    router=base_router,
+    journal_path="/var/log/messages",
+    checkpoint_interval=100
+)
+
+# Add circuit breaker for fault tolerance
+protected_router = CircuitBreaker(
+    router=journaled_router,
+    failure_threshold=5,
+    recovery_timeout=30
+)
+```
+
+**Features to implement:**
+- Write-ahead logging
+- Message replay from checkpoints
+- Distributed transactions
+- Saga pattern for complex workflows
+- Dead letter queue handling
+
+#### 2. Performance Layer (Achieving Low Latency)
+
+For games requiring <50ms latency with thousands of concurrent players:
+
+```python
+# Example: Performance optimization wrapper
+from agent_communication import RabbitMQRouter
+from your_performance_package import BatchingRouter, MessageCache
+
+# Base router from this package
+base_router = RabbitMQRouter(url="amqp://localhost")
+
+# Add batching for throughput
+batched_router = BatchingRouter(
+    router=base_router,
+    batch_size=100,
+    batch_timeout=0.01  # 10ms
+)
+
+# Add caching for frequently accessed data
+cached_router = MessageCache(
+    router=batched_router,
+    cache_ttl=60,
+    cache_size=10000
+)
+```
+
+**Features to implement:**
+- Message batching and compression
+- Local caching with Redis/Memcached
+- Connection multiplexing
+- Priority queues
+- Geographic routing
+
+#### 3. Security Layer (For Public Games)
+
+For games exposed to the internet:
+
+```python
+# Example: Security wrapper
+from agent_communication import RedisRouter
+from your_security_package import SecureRouter, RateLimiter
+
+base_router = RedisRouter(url="redis://localhost")
+
+# Add authentication and rate limiting
+secure_router = SecureRouter(
+    router=base_router,
+    auth_provider=YourAuthProvider(),
+    rate_limiter=RateLimiter(
+        max_per_second=100,
+        max_burst=500
+    ),
+    encryption_key=YOUR_KEY
+)
+```
+
+**Features to implement:**
+- Message authentication
+- Rate limiting per player
+- Message encryption
+- Input validation and sanitization
+- Access control lists
+
+### Complete Production Example
+
+Here's how to compose all layers for a production game:
+
+```python
+from agent_communication import RedisRouter, BaseAgent, BaseMessage
+from resilience import MessageJournal, CircuitBreaker
+from performance import BatchingRouter, CompressingRouter
+from security import AuthenticatedRouter, RateLimiter
+from your_game import GameStateManager, PlayerAgent
+
+# 1. Start with core messaging
+core_router = RedisRouter(
+    url="redis://redis-cluster:6379",
+    connection_pool_size=50
+)
+
+# 2. Add resilience
+resilient_router = CircuitBreaker(
+    MessageJournal(core_router, journal_dir="/data/journal"),
+    failure_threshold=5,
+    recovery_timeout=30
+)
+
+# 3. Add performance
+fast_router = BatchingRouter(
+    CompressingRouter(resilient_router, algorithm="lz4"),
+    batch_size=100,
+    batch_timeout=0.005  # 5ms
+)
+
+# 4. Add security
+secure_router = AuthenticatedRouter(
+    RateLimiter(fast_router, max_rps=1000),
+    auth_service=YourAuthService()
+)
+
+# 5. Initialize your game
+game = GameStateManager(router=secure_router)
+player_agent = PlayerAgent(router=secure_router)
+
+# Ready for production!
+await game.start()
+```
+
+### Testing Strategy for Production
+
+Each layer should be tested independently:
+
+```python
+# Test core messaging (this package)
+pytest tests/unit tests/integration
+
+# Test resilience layer
+pytest your_resilience_package/tests --marks="failover"
+
+# Test performance layer
+pytest your_performance_package/tests --marks="load"
+
+# Test security layer
+pytest your_security_package/tests --marks="security"
+
+# Test complete stack
+pytest your_game/tests/e2e --marks="production"
+```
+
+### Infrastructure Considerations
+
+For production deployment:
+
+**Redis Setup:**
+- Use Redis Sentinel or Redis Cluster for HA
+- Enable persistence (AOF or RDB)
+- Configure appropriate memory policies
+- Set up monitoring with Redis Exporter
+
+**RabbitMQ Setup:**
+- Use RabbitMQ clustering with mirrored queues
+- Configure dead letter exchanges
+- Set up management plugin for monitoring
+- Use durable queues and persistent messages
+
+**Network:**
+- Use private networks between services
+- Configure firewalls and security groups
+- Consider service mesh (Istio, Linkerd)
+- Set up load balancers for broker access
+
+### When to Use What
+
+**Use agent-communication alone when:**
+- Building prototypes or MVPs
+- Testing game mechanics locally
+- Learning the system
+- Building non-critical internal tools
+
+**Add resilience layer when:**
+- Player progress must never be lost
+- System needs to recover from failures
+- Distributed transactions are required
+- Audit trail is necessary
+
+**Add performance layer when:**
+- Serving >1000 concurrent players
+- Latency requirements <50ms
+- High message throughput (>10k msg/sec)
+- Geographic distribution needed
+
+**Add security layer when:**
+- Game is publicly accessible
+- Real money or valuable items involved
+- Competitive gameplay (anti-cheat)
+- Regulatory compliance required
+
 ## Structured Logging
 
 The package includes JSON Lines logging for observability:
@@ -285,19 +543,33 @@ Abstract base class for all agents. Subclasses must:
 - [x] Type safety with mypy
 - [x] Comprehensive test suite
 
-### Phase 2 (v0.2.0) - In Progress
-- [ ] Redis backend implementation
-- [ ] RabbitMQ backend implementation
-- [ ] MessagingSystem orchestrator
-- [ ] Auto-subscription based on agent declarations
-- [ ] Message serialization/deserialization
+### Phase 2 (v0.2.0) ✅ Complete
+- [x] Redis backend implementation with pub/sub
+- [x] RabbitMQ backend with topic exchanges
+- [x] Message serialization/deserialization
+- [x] Auto-subscription based on agent declarations
+- [x] Pattern matching with wildcards
+- [x] Connection pooling and health checks
+- [x] Graceful shutdown and cleanup
+- [x] Comprehensive integration tests
 
 ### Phase 3 (v0.3.0) - Planned
-- [ ] Performance optimizations
-- [ ] Message middleware support
-- [ ] Metrics and monitoring
-- [ ] Circuit breaker patterns
-- [ ] Message replay capabilities
+- [ ] Connection retry with exponential backoff
+- [ ] Batch message publishing API
+- [ ] Metrics hooks for monitoring
+- [ ] Protocol buffers support
+- [ ] Better error recovery mechanisms
+- [ ] Performance benchmarks
+
+### Out of Scope (Use Additional Layers)
+These features are intentionally NOT part of this package to maintain focus and composability:
+- ❌ Message journaling/replay (use resilience layer)
+- ❌ Rate limiting (use security layer)
+- ❌ Message compression (use performance layer)
+- ❌ Authentication/authorization (use security layer)
+- ❌ Distributed transactions (use resilience layer)
+- ❌ Load balancing (use infrastructure layer)
+- ❌ Game-specific logic (implement in your game)
 
 ## Contributing
 
